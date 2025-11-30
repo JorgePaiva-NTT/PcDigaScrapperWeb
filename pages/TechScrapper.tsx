@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios, { AxiosResponse } from 'axios';
 
-import { AgGridReact } from 'ag-grid-react'; // the AG Grid React Component
+import dynamic from 'next/dynamic';
+const AgGridReact = dynamic(() => import('ag-grid-react').then(mod => mod.AgGridReact), { ssr: false });
 
-import 'ag-grid-community/dist/styles/ag-grid.css'; // Core grid CSS, always needed
-import 'ag-grid-community/dist/styles/ag-theme-alpine.css'; // Optional theme CSS
-import 'ag-grid-community/dist/styles/ag-theme-balham-dark.css'; // Optional theme CSS
-import 'ag-grid-community/dist/styles/ag-theme-alpine-dark.css'; // Optional theme CSS
-import 'ag-grid-community/dist/styles/ag-theme-material.css'; // Optional theme CSS
-import { AgChartOptions, Autowired, ColDef, ColGroupDef, ICellRendererParams, RowSelectedEvent } from 'ag-grid-community';
+import 'ag-grid-community/styles/ag-grid.css'; // Core grid CSS, always needed
+import 'ag-grid-community/styles/ag-theme-alpine.css'; // Optional theme CSS
+import 'ag-grid-community/styles/ag-theme-balham.css'; // Optional theme CSS
+import 'ag-grid-community/styles/ag-theme-material.css'; // Optional theme CSS
 
-import { AgChartsReact } from 'ag-charts-react';
+const AgChartsReact = dynamic(() => import('ag-charts-react').then(mod => mod.AgChartsReact), { ssr: false });
 import { Product } from '../models/Product';
 import { Seller } from '../models/Seller';
 import Image from 'next/image'
@@ -29,7 +28,7 @@ function TechScrapper() {
     const [SelectedRow, SetSelectedRow] = useState<Product>();
     const [urlInput, setUrlInput] = React.useState('');
     const [visible, setVisible] = useState(false);
-    const [AGGOptions, setAGGOptions] = useState<AgChartOptions>({
+    const [AGGOptions, setAGGOptions] = useState<any>({
         autoSize: true,
         theme: 'ag-material-dark',
         legend: {
@@ -56,7 +55,7 @@ function TechScrapper() {
     const [toastMessage, setToastMessage] = useState('');
     const [toastTitle, setToastTitle] = useState('');
 
-    const gridRef = useRef<AgGridReact>(null);
+    const [gridApi, setGridApi] = useState<any>(null);
 
     const theme = {
         global: {
@@ -100,12 +99,12 @@ function TechScrapper() {
     }*/
 
     // Each Column Definition results in one Column.
-    const [columnDefs, setColumnDefs] = useState<(ColDef | ColGroupDef)[]>([
+    const [columnDefs, setColumnDefs] = useState<any[]>([
         {
             field: 'image',
             autoHeight: true,
             resizable: true,
-            cellRenderer: (prop: ICellRendererParams) =>
+            cellRenderer: (prop: any) =>
                 <div style={{}}>
                     {
                         (prop.value as String).includes('globaldata')
@@ -121,7 +120,7 @@ function TechScrapper() {
             field: 'url',
             resizable: true,
             width: 300,
-            cellRenderer: (prop: ICellRendererParams) =>
+            cellRenderer: (prop: any) =>
                 <Box
                     direction="column"
                     justify="center"
@@ -140,7 +139,7 @@ function TechScrapper() {
                     <button
                         style={{ marginLeft: "5px", marginRight: "5px", width: "80px" }}
                         onClick={async () => {
-                            gridRef?.current?.api.showLoadingOverlay();
+                            gridApi?.showLoadingOverlay();
                             try {
                                 await axios.get<Product | any>(`${getApiUrl()}/scrape?sku=${prop.data.sku}`);
                                 await getProducts();
@@ -149,17 +148,17 @@ function TechScrapper() {
                                 setToastMessage(error.response.data.message);
                                 setVisible(true);
                             }
-                            gridRef?.current?.api.hideOverlay();
+                            gridApi?.hideOverlay();
                         }}>
                         Scrape
                     </button>
                     {
                         !prop.data.image ?
                             <button onClick={async () => {
-                                gridRef?.current?.api.showLoadingOverlay();
+                                gridApi?.showLoadingOverlay();
                                 await axios.get<Product>(`${getApiUrl()}/product/update?prop=image&url=${prop.value}`);
                                 await getProducts();
-                                gridRef?.current?.api.hideOverlay();
+                                gridApi?.hideOverlay();
                             }}>
                                 Update Image
                             </button>
@@ -171,13 +170,15 @@ function TechScrapper() {
     ]);
 
     const onSelectionChanged = useCallback(() => {
-        const selectedRows: Product[] = gridRef.current!.api.getSelectedRows();
+        if (!gridApi) return;
+        const selectedRows: Product[] = gridApi.getSelectedRows();
+        if (!selectedRows || selectedRows.length === 0) return;
+        
         SetSelectedRow(selectedRows[0]);
-        const options = cloneDeep(AGGOptions) as AgChartOptions;
+        const options = cloneDeep(AGGOptions) as any;
         options.series = [];
         selectedRows[0].sellers.forEach(element => {
             var prices = element.productPrices;
-            console.log(prices);
             options.series?.push({
                 data: prices,
                 xKey: 'date',
@@ -190,7 +191,7 @@ function TechScrapper() {
                     fontWeight: 'bold'
                 }
 
-            },
+            } as any,
                 {
                     data: prices,
                     xKey: 'date',
@@ -201,16 +202,16 @@ function TechScrapper() {
                         enabled: true,
                         color: 'white'
                     }
-                });
+                } as any);
         });
         setAGGOptions(options);
-    }, [AGGOptions]);
+    }, [AGGOptions, gridApi]);
 
     const onChange = (event: any) => setUrlInput(event.target.value);
     const onInpuitKeyDown = async (event: any) => {
         if (event.key === 'Enter') {
-            gridRef?.current?.api.showLoadingOverlay();
-            const res = await axios.get<Product | any>(`${getApiUrl()}/product/create?url=${urlInput}`);
+            gridApi?.showLoadingOverlay();
+            const res = await axios.get<Product | any>(`${getApiUrl()}/product/create?url=${encodeURIComponent(urlInput)}`);
             if (res.status >= 400) {
                 setToastTitle('Error product/create');
                 setToastMessage(res.data.message);
@@ -219,7 +220,7 @@ function TechScrapper() {
             else {
                 await getProducts();
             }
-            gridRef?.current?.api.hideOverlay();
+            gridApi?.hideOverlay();
         }
     };
 
@@ -231,7 +232,7 @@ function TechScrapper() {
             </Box>
             <div className="ag-theme-balham-dark" style={{ width: '80%', height: 600, marginLeft: "10%", marginRight: "10%" }}>
                 <AgGridReact
-                    ref={gridRef}
+                    onGridReady={(params: any) => setGridApi(params.api)}
                     rowHeight={100}
                     rowData={Products} // Row Data for Rows
                     columnDefs={columnDefs} // Column Defs for Columns
@@ -241,7 +242,7 @@ function TechScrapper() {
                 />
             </div>
             {
-                SelectedRow !== undefined ? <div style={{ width: "65%", marginTop: 10 }}> <AgChartsReact options={AGGOptions} /> </div> : <p>Select a row</p>
+                SelectedRow !== undefined ? <div style={{ width: "65%", height: "400px", marginTop: 10 }}> <AgChartsReact options={AGGOptions} /> </div> : <p>Select a row</p>
             }
         </Box>
         {
